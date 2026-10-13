@@ -1,24 +1,21 @@
 // Tasks are managed through the API (proxied via the frontend baseURL) so tests start from a known state.
 
-async function deleteAllTasks(request) {
+async function getTasks(request) {
   const response = await request.get('/api/tasks');
-  const tasks = await response.json();
+  return response.json();
+}
+
+async function deleteAllTasks(request) {
+  const tasks = await getTasks(request);
 
   for (const task of tasks) {
     await request.delete(`/api/tasks/${task.id}`);
   }
 }
 
-// The create endpoint ignores `completed`, so completed tasks are marked with a follow-up update.
-async function createTask(request, { completed, ...task }) {
+async function createTask(request, task) {
   const response = await request.post('/api/tasks', { data: task });
-  const created = await response.json();
-
-  if (completed) {
-    const updated = await request.put(`/api/tasks/${created.id}`, { data: { completed } });
-    return updated.json();
-  }
-  return created;
+  return response.json();
 }
 
-module.exports = { deleteAllTasks, createTask };
+module.exports = { deleteAllTasks, createTask, getTasks };

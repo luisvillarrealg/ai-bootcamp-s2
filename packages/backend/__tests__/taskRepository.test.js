@@ -28,6 +28,10 @@ describe('taskRepository', () => {
     expect(task.createdAt).toBeTruthy();
   });
 
+  it('creates a task that is already completed', () => {
+    expect(repository.create({ title: 'Done', completed: true }).completed).toBe(true);
+  });
+
   it('lists tasks with the newest first', () => {
     const first = repository.create({ title: 'First' });
     const second = repository.create({ title: 'Second' });

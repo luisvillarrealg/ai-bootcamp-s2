@@ -14,7 +14,7 @@ function createTaskRepository(db) {
   const findStmt = db.prepare('SELECT * FROM tasks WHERE id = ?');
   const listStmt = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC, id DESC');
   const insertStmt = db.prepare(
-    'INSERT INTO tasks (title, description, due_date, priority) VALUES (?, ?, ?, ?)'
+    'INSERT INTO tasks (title, description, due_date, priority, completed) VALUES (?, ?, ?, ?, ?)'
   );
   const deleteStmt = db.prepare('DELETE FROM tasks WHERE id = ?');
 
@@ -30,8 +30,8 @@ function createTaskRepository(db) {
 
     findById,
 
-    create({ title, description = '', dueDate = null, priority = 'medium' }) {
-      const result = insertStmt.run(title, description, dueDate, priority);
+    create({ title, description = '', dueDate = null, priority = 'medium', completed = false }) {
+      const result = insertStmt.run(title, description, dueDate, priority, completed ? 1 : 0);
       return findById(result.lastInsertRowid);
     },
 

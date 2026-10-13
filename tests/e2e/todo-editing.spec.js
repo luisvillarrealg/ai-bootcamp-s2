@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { TodoPage } = require('./pages/TodoPage');
-const { deleteAllTasks, createTask } = require('./helpers/api');
+const { deleteAllTasks, createTask, getTasks } = require('./helpers/api');
 
 test.describe('Todo editing and deleting', () => {
   let todoPage;
@@ -16,7 +16,7 @@ test.describe('Todo editing and deleting', () => {
     await deleteAllTasks(request);
   });
 
-  test('edits the title, due date, and priority of a task', async () => {
+  test('edits the title, due date, and priority of a task', async ({ request }) => {
     await todoPage.editTask('Original title', {
       title: 'Edited title',
       dueDate: '2099-12-31',
@@ -28,14 +28,21 @@ test.describe('Todo editing and deleting', () => {
     await expect(item).toContainText('Due Dec 31, 2099');
     await expect(item).toContainText('High priority');
     await expect(todoPage.taskItem('Original title')).toHaveCount(0);
+    expect(await getTasks(request)).toMatchObject([
+      { title: 'Edited title', dueDate: '2099-12-31', priority: 'high' },
+    ]);
   });
 
-  test('keeps the task when deletion is cancelled and removes it when confirmed', async () => {
+  test('keeps the task when deletion is cancelled and removes it when confirmed', async ({
+    request,
+  }) => {
     await todoPage.deleteTask('Original title', { confirm: false });
     await expect(todoPage.taskItem('Original title')).toBeVisible();
+    expect(await getTasks(request)).toHaveLength(1);
 
     await todoPage.deleteTask('Original title');
     await expect(todoPage.taskItem('Original title')).toHaveCount(0);
     await expect(todoPage.notice).toHaveText('Task deleted');
+    expect(await getTasks(request)).toEqual([]);
   });
 });

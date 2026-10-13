@@ -37,6 +37,12 @@ describe('validateTaskInput', () => {
     expect(validateTaskInput(undefined).errors).toContain('Title is required');
   });
 
+  it('accepts a title of exactly the maximum length', () => {
+    const { errors } = validateTaskInput({ title: 'a'.repeat(MAX_TITLE_LENGTH) });
+
+    expect(errors).toEqual([]);
+  });
+
   it('rejects titles longer than the maximum length', () => {
     const { errors } = validateTaskInput({ title: 'a'.repeat(MAX_TITLE_LENGTH + 1) });
 

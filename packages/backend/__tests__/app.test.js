@@ -29,13 +29,16 @@ describe('app', () => {
   });
 
   it('uses an isolated database for each app instance', async () => {
-    await request(app).post('/api/tasks').send({ title: 'Only in first app' });
+    const created = await request(app).post('/api/tasks').send({ title: 'Only in first app' });
+    expect(created.status).toBe(201);
     const otherDb = createDatabase();
     const otherApp = createApp(otherDb);
 
-    const response = await request(otherApp).get('/api/tasks');
+    const first = await request(app).get('/api/tasks');
+    const other = await request(otherApp).get('/api/tasks');
     otherDb.close();
 
-    expect(response.body).toEqual([]);
+    expect(first.body).toHaveLength(1);
+    expect(other.body).toEqual([]);
   });
 });

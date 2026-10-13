@@ -103,6 +103,17 @@ describe('App', () => {
     expect(screen.getByText('Due May 20, 2099')).toBeInTheDocument();
     expect(screen.getByText('High priority')).toBeInTheDocument();
     expect(await screen.findByText('Task added')).toBeInTheDocument();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ title: 'Buy milk', dueDate: '2099-05-20', priority: 'high' });
+  });
+
+  it('does not call the API when the title is empty', async () => {
+    await renderApp();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add task' }));
+
+    expect(screen.getByText('Title is required')).toBeInTheDocument();
+    expect(tasks).toEqual([]);
   });
 
   it('shows an error message when adding a task fails', async () => {
@@ -117,6 +128,8 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add task' }));
 
     expect(await screen.findByText('Failed to add task: Title is required')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Title/)).toHaveValue('Buy milk');
+    expect(screen.queryByRole('list', { name: 'Tasks' })).not.toBeInTheDocument();
   });
 
   it('edits an existing task', async () => {
@@ -132,6 +145,40 @@ describe('App', () => {
 
     expect(await screen.findByText('New title')).toBeInTheDocument();
     expect(screen.queryByText('Old title')).not.toBeInTheDocument();
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].title).toBe('New title');
+  });
+
+  it('closes the edit dialog without saving when cancelled', async () => {
+    tasks = [makeTask({ title: 'Unchanged' })];
+    await renderApp();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit task Unchanged' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit task' });
+    await userEvent.type(within(dialog).getByLabelText(/Title/), ' plus more');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('Unchanged')).toBeInTheDocument();
+    expect(tasks[0].title).toBe('Unchanged');
+  });
+
+  it('keeps the edit dialog open and reports the error when saving fails', async () => {
+    tasks = [makeTask({ title: 'Old title' })];
+    server.use(
+      rest.put('/api/tasks/:id', (req, res, ctx) =>
+        res(ctx.status(404), ctx.json({ error: 'Task not found' }))
+      )
+    );
+    await renderApp();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit task Old title' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit task' });
+    await userEvent.type(within(dialog).getByLabelText(/Title/), ' changed');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Failed to update task: Task not found')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Edit task' })).toBeInTheDocument();
   });
 
   it('completes and reopens a task', async () => {
@@ -141,9 +188,23 @@ describe('App', () => {
     const checkbox = screen.getByRole('checkbox', { name: 'Mark task Toggle me as completed' });
     await userEvent.click(checkbox);
     await waitFor(() => expect(checkbox).toBeChecked());
+    expect(tasks[0].completed).toBe(true);
 
     await userEvent.click(checkbox);
     await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(tasks[0].completed).toBe(false);
+  });
+
+  it('leaves a task unchanged and reports the error when toggling fails', async () => {
+    tasks = [makeTask({ title: 'Stays active' })];
+    server.use(rest.put('/api/tasks/:id', (req, res, ctx) => res(ctx.status(500))));
+    await renderApp();
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Mark task Stays active as completed' });
+    await userEvent.click(checkbox);
+
+    expect(await screen.findByText(/Failed to update task/)).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
   });
 
   it('deletes a task after confirmation', async () => {
@@ -155,6 +216,20 @@ describe('App', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(screen.queryByText('Delete me')).not.toBeInTheDocument());
+    expect(tasks).toEqual([]);
+  });
+
+  it('keeps the task and reports the error when deletion fails', async () => {
+    tasks = [makeTask({ title: 'Stubborn' })];
+    server.use(rest.delete('/api/tasks/:id', (req, res, ctx) => res(ctx.status(500))));
+    await renderApp();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete task Stubborn' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete task?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    expect(await screen.findByText(/Failed to delete task/)).toBeInTheDocument();
+    expect(screen.getByText('Stubborn')).toBeInTheDocument();
   });
 
   it('keeps the task when deletion is cancelled', async () => {
@@ -166,6 +241,18 @@ describe('App', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
     expect(screen.getByText('Keep me')).toBeInTheDocument();
+    expect(tasks).toHaveLength(1);
+  });
+
+  it('dismisses the notification when it is closed', async () => {
+    await renderApp();
+    await userEvent.type(screen.getByLabelText(/Title/), 'Buy milk');
+    await userEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    const alert = await screen.findByRole('alert');
+
+    await userEvent.click(within(alert).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 
   it('sorts active tasks by due date before completed tasks', async () => {

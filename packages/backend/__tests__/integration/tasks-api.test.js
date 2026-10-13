@@ -41,6 +41,15 @@ describe('Tasks API', () => {
       expect(response.status).toBe(200);
       expect(response.body.map((task) => task.title).sort()).toEqual(['One', 'Two']);
     });
+
+    it('returns the newest task first', async () => {
+      await createTask({ title: 'Older' });
+      await createTask({ title: 'Newer' });
+
+      const response = await request(app).get('/api/tasks');
+
+      expect(response.body.map((task) => task.title)).toEqual(['Newer', 'Older']);
+    });
   });
 
   describe('POST /api/tasks', () => {
@@ -81,6 +90,30 @@ describe('Tasks API', () => {
       const response = await request(app).get('/api/tasks');
 
       expect(response.body).toEqual([created]);
+    });
+
+    it('trims the title and creates a completed task when requested', async () => {
+      const created = await createTask({ title: '  Padded  ', completed: true });
+
+      expect(created.title).toBe('Padded');
+      expect(created.completed).toBe(true);
+    });
+
+    it('stores SQL special characters literally', async () => {
+      const title = "Robert'); DROP TABLE tasks;--";
+      await createTask({ title });
+
+      const response = await request(app).get('/api/tasks');
+
+      expect(response.body.map((task) => task.title)).toEqual([title]);
+    });
+
+    it('does not create a task when validation fails', async () => {
+      await request(app).post('/api/tasks').send({ title: '' });
+
+      const response = await request(app).get('/api/tasks');
+
+      expect(response.body).toEqual([]);
     });
 
     it.each([
@@ -127,6 +160,29 @@ describe('Tasks API', () => {
 
       expect(completed.body.completed).toBe(true);
       expect(active.body.completed).toBe(false);
+    });
+
+    it('leaves fields that were not sent unchanged and persists the update', async () => {
+      const task = await createTask({
+        title: 'Keep',
+        description: 'Keep too',
+        dueDate: '2030-01-01',
+        priority: 'high',
+      });
+
+      await request(app).put(`/api/tasks/${task.id}`).send({ completed: true });
+
+      const list = await request(app).get('/api/tasks');
+      expect(list.body).toEqual([{ ...task, completed: true }]);
+    });
+
+    it('does not modify the task when validation fails', async () => {
+      const task = await createTask({ title: 'Stable' });
+
+      await request(app).put(`/api/tasks/${task.id}`).send({ title: '', priority: 'high' });
+
+      const list = await request(app).get('/api/tasks');
+      expect(list.body).toEqual([task]);
     });
 
     it('removes a due date', async () => {
@@ -183,6 +239,16 @@ describe('Tasks API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Task not found');
+    });
+
+    it('only deletes the requested task', async () => {
+      const keep = await createTask({ title: 'Keep' });
+      const remove = await createTask({ title: 'Remove' });
+
+      await request(app).delete(`/api/tasks/${remove.id}`);
+
+      const list = await request(app).get('/api/tasks');
+      expect(list.body).toEqual([keep]);
     });
 
     it('returns 400 for an invalid id', async () => {
